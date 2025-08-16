@@ -1,2 +1,5 @@
 requests
-httpagentparser
+cryptography
+pypiwin32
+psutil
+pyautogui
