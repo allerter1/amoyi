@@ -1,5 +1,1 @@
-requests
-cryptography
-pypiwin32
-psutil
-pyautogui
+
